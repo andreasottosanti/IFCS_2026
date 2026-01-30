@@ -1,0 +1,27 @@
+{
+    "id": "E5026927",
+    "path": "~/perla_to_mouse_brain/2_SVgenes_logcounts.R",
+    "project_path": "2_SVgenes_logcounts.R",
+    "type": "r_source",
+    "hash": "1896264287",
+    "contents": "",
+    "dirty": false,
+    "created": 1769169059928.0,
+    "source_on_save": false,
+    "relative_order": 5,
+    "properties": {
+        "tempName": "Untitled1",
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "108,0",
+        "scrollLine": "96"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1769770787,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1769770787971,
+    "read_only": false,
+    "read_only_alternatives": []
+}
