@@ -18,12 +18,11 @@ W <- readRDS("proximity_matrix.RDS")
 
 # using log-counts
 source("2_SVgenes_logcounts.R")
-
-# using Poisson deviance residuals
-source("2_SVgenes_PoissonResiduals.R")
+x <- readRDS("Results/SVgenes_logcounts.RDS")
+res <- readRDS("Results/perlaRun_SVgenes_logcounts.RDS")
 
 
 # GLMPCA ------------------------------------------------------------------
 
-source("2_GLMPCA.R")
-x <- readRDS("Results/GLMPCA.RDS")
+#source("2_GLMPCA.R")
+#x <- readRDS("Results/GLMPCA.RDS")

@@ -107,6 +107,19 @@ ggplot()+theme_minimal()
 grid.raster(img)
 grid.points(spots$x_img, -spots$y_img, pch=19, gp=gpar(col=gmm_viridis), size = unit(1.5, "char"))
 
+# pca
+values <- logcounts(x)
+values <- t(values - mean(values))
+pc <- data.frame(princomp(values)$scores[,1:2], z = colData(x)$perla)
+names(pc) <- c("x","y","z")
+ggplot(pc, aes(x,y))+geom_point()
+
+pc <- data.frame(reducedDim(x)[,1:2], z = colData(x)$perla)
+names(pc) <- c("x","y","z")
+ggplot(pc, aes(x,y,col = z))+geom_point(cex = 3)+
+  scale_colour_viridis_d()+theme_classic()
+  theme(text = element_text(size = 18))
+
 
 # plot some genes (estimated)
 genes <- c("Apoe", "S100a5", "Kctd12", "Sash1")
@@ -125,6 +138,8 @@ ggplot(vals_frame, aes(x = x, y = y, fill = values))+
   scale_fill_gradient2(midpoint=mean(vals_frame$values), mid="#999999", high="#E69F00",
                         low="#56B4E9", space ="Lab" )
 ggsave(filename = "Images/SVgenes_logcounts_gene_expressions.pdf", width = 9, height = 7)
+
+
 
 # Save results ------------------------------------------------------------
 
