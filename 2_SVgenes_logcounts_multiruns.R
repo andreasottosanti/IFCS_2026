@@ -3,9 +3,6 @@ source("Functions/align_clusters.R")
 # data selection ----------------------------------------------------------
 selected_genes <- 20 
 x <- x[rowData(x)$rank <= selected_genes,]
-plot(rowData(x)$rank_binomial_deviance, rowData(x)$rank,
-     xlab = "deviance rank", ylab = "spatial rank")
-
 
 # fitting perla on logcounts (centered) -----------------------------------------------------------
 selected <- t(assay(x, 
@@ -13,26 +10,61 @@ selected <- t(assay(x,
 selected <- selected - mean(selected)
 boxplot(selected);abline(h = 0, lty = 2)
 heatmap(selected)
-R <- 5*10^3
+R <- 10^4
 K <- 4
 nstart <- 5
 runs_perla <- list()
+runtime <- c()
 for(i in 1:nstart){
-  runs_perla[[i]] <- perla(y = selected, W = W, K = K, R = R,
-                           mean.penalty = c("d","cd"), burnin = 1:(R/2), seed = 1234*i) 
+  runtime[i] <- system.time(runs_perla[[i]] <- perla(y = selected, W = W, K = K, R = R,
+                           mean.penalty = c("d","cd"), burnin = 1:(R/2), seed = 1234*i) )
   runs_perla[[i]] <- perla::recover.loglikelihood(runs_perla[[i]])
 }
-saveRDS(runs_perla, file = "Results/perlaRuns_SVgenes_logcounts.RDS")
-res <- runs_perla[[which.max(lapply(runs_perla, function(y) max(y$loglik)))]]
-saveRDS(res, file = "Results/perlaRun_SVgenes_logcounts.RDS")
-z <- factor(apply(res$Z[,,which.max(res$loglik)], 1, function(y) which(y == 1)))
+mean(runtime)
+
+# resolve the label switching
+p <- merge.perla(runs_perla)
+p <- remove.label.switching2(values = p)
+p$relabelling$similarity
+
+# compute the potential scale reduction factor
+posterior_4d <- array(p$results$ECR$M,
+                      dim = c(dim(runs_perla[[1]]$Mu)[3], nstart, K, selected_genes))
+rhat_coda <- array(NA, dim = c(K, selected_genes))
+par(mfrow = c(2,2))
+for(k in 1:K){
+  for(j in 1:selected_genes){
+    samples_matrix <- posterior_4d[, , k, j]
+    mcmc_list <- mcmc.list(
+      lapply(1:nstart, function(l) {
+        mcmc(samples_matrix[, l])
+      })
+    )
+    rhat_coda[k, j] <- gelman.diag(
+      mcmc_list,
+      autoburnin = FALSE
+    )$psrf[1]
+    if(rhat_coda[k, j]>1.1){
+      matplot(samples_matrix, type = "l", 
+              main = paste("Cluster",k, "Gene",j,",",round(rhat_coda[k, j],3)))
+     abline(h = 0) 
+    }
+  }
+}
+summary(as.vector(rhat_coda))
+quantile(as.vector(rhat_coda), .85)
+mean(as.vector(rhat_coda) <= 1.05)
+
+z <- factor(p$relabelling$clusters[2,])
 colData(x)$perla <- z
 
 # computing the HPD intervals
-hpd <- apply(res$Mu, c(1,2), function(y) HPDinterval(mcmc(y), prob = .99))
+res_mu <- p$results$ECR$M
+perla_draws <- res_mu <- aperm(res_mu, c(2, 3, 1))
+hpd <- apply(perla_draws, c(1,2), function(y) HPDinterval(mcmc(y), prob = .99))
+saveRDS(res_mu, file = "Results/perlaRun_SVgenes_logcounts.RDS")
 
 # preparing the ggplot
-perla_draws <- res$Mu
 dimnames(perla_draws) <- list(
   Cluster = factor(1:dim(perla_draws)[1]),
   Gene = colnames(selected),
@@ -41,8 +73,8 @@ perla_draws <- as.data.frame.table(perla_draws)
 colnames(perla_draws)[colnames(perla_draws) == "Freq"] <- "Value"
 levels(perla_draws$Cluster) <- paste("Cluster", levels(perla_draws$Cluster))
 perla_draws <- cbind(perla_draws,
-                     leftHPD = rep(as.vector(hpd[1,,]), dim(res$Mu)[3]),
-                     rightHPD = rep(as.vector(hpd[2,,]), dim(res$Mu)[3]))
+                     leftHPD = rep(as.vector(hpd[1,,]), dim(res_mu)[3]),
+                     rightHPD = rep(as.vector(hpd[2,,]), dim(res_mu)[3]))
 perla_draws$Contains_zero <- factor(as.numeric(perla_draws$leftHPD < 0 & perla_draws$rightHPD > 0))
 perla_draws$Cluster_plot <- ifelse(perla_draws$Contains_zero == 1,
                                    "Contains zero",
@@ -71,40 +103,6 @@ ggplot(perla_draws,
 ggsave("Images/SVgenes_logcounts_posterior.pdf", width = 9, height = 7)
 
 
-# other kinds of plots
-
-
-ggplot(perla_draws, aes(x = Gene, y = Value, color = Contains_zero))+
-  geom_boxplot()+theme_bw()+
-  facet_wrap(~Cluster, nrow = 3)+
-  geom_abline(intercept = 0, slope = 0, lty = 2)+
-  labs(y = expression(mu))+
-  scale_color_manual(values = c("0" = "black", "1" = "grey")) +
-  theme( axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), legend.position = "none")
-
-ggplot(perla_draws, aes(x = Cluster, y = Value, fill = Cluster)) +
-  geom_hline(yintercept = 0, lty = 2, color = "black") +
-  geom_boxplot(
-    color = "grey30",      
-    linewidth = 0.2,       
-    outlier.size = 0.5,    
-    outlier.alpha = 0.5    
-  ) +
-  facet_grid(~ Gene, switch = "x") + 
-  theme_bw() +
-  labs(x = "", y = expression(mu), fill = "")+
-  scale_fill_viridis_d() +
-  theme(
-    legend.position = "bottom",
-    strip.background = element_blank(),
-    axis.text.x = element_blank(),
-    axis.ticks.x = element_blank(),
-   panel.grid.major.x = element_blank(),
-    panel.spacing = unit(0.0, "lines"),     
-    panel.border = element_rect(color = "black", fill = NA) 
-  )
-
-
 # k-means -----------------------------------------------------------------
 
 set.seed(123)
@@ -128,10 +126,6 @@ gg_long <- reshape(gg,
                    timevar = "Method",                # Come chiamare la colonna dei nomi
                    times = c("perla", "km", "gmm"),   # I nomi da assegnare
                    direction = "long")                # Direzione della trasformazione
-ggplot(gg_long, aes(x, y, col = Cluster))+
-  geom_point(cex = 5)+theme_bw()+
-  facet_wrap(~Method)
-
 ggplot(gg_long[gg_long$Method == "perla",], aes(x, y, col = Cluster))+
   geom_point(cex = 5)+theme_bw()
 
@@ -154,31 +148,20 @@ ggplot()+theme_minimal()
 grid.raster(img)
 grid.points(spots$x_img, -spots$y_img, pch=19, gp=gpar(col=perla_viridis), size = unit(1.5, "char"))
 
+# kmeans
 ggplot()+theme_minimal()
 grid.raster(img)
 grid.points(spots$x_img, -spots$y_img, pch=19, gp=gpar(col=km_viridis), size = unit(1.5, "char"))
 
+# gmm
 ggplot()+theme_minimal()
 grid.raster(img)
 grid.points(spots$x_img, -spots$y_img, pch=19, gp=gpar(col=gmm_viridis), size = unit(1.5, "char"))
 
-# pca
-values <- logcounts(x)
-values <- t(values - mean(values))
-pc <- data.frame(princomp(values)$scores[,1:2], z = colData(x)$perla)
-names(pc) <- c("x","y","z")
-ggplot(pc, aes(x,y))+geom_point()
-
-pc <- data.frame(reducedDim(x)[,1:2], z = colData(x)$perla)
-names(pc) <- c("x","y","z")
-ggplot(pc, aes(x,y,col = z))+geom_point(cex = 3)+
-  scale_colour_viridis_d()+theme_classic()
-  theme(text = element_text(size = 18))
-
 
 # plot some genes (estimated)
 genes <- c("Apoe", "S100a5", "Kctd12", "Sash1")
-gene_means <- apply(res$Mu, c(1,2), function(y) mean(mcmc(y)))[,rowData(x)$gene_names %in% genes]
+gene_means <- apply(res_mu, c(1,2), function(y) mean(mcmc(y)))[,rowData(x)$gene_names %in% genes]
 colnames(gene_means) <- genes
 vals <- t(gene_means[colData(x)$perla,])
 vals_frame <- data.frame(values = as.vector(vals),
@@ -191,7 +174,7 @@ ggplot(vals_frame, aes(x = x, y = y, fill = values))+
   labs(fill = "", x = "", y = "")+
   theme(text = element_text(size = 18), axis.text = element_blank())+ 
   scale_fill_gradient2(midpoint=mean(vals_frame$values), mid="#999999", high="#E69F00",
-                        low="#56B4E9", space ="Lab" )
+                       low="#56B4E9", space ="Lab" )
 ggsave(filename = "Images/SVgenes_logcounts_gene_expressions.pdf", width = 9, height = 7)
 
 
