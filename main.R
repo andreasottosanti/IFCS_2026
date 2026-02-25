@@ -17,7 +17,7 @@ W <- readRDS("proximity_matrix.RDS")
 # Gene selection: Spatially-variable --------------------------------------
 
 # using log-counts
-source("2_SVgenes_logcounts_multiruns.R")
+source("2_SVgenes_logcountss.R")
 x <- readRDS("Results/SVgenes_logcounts.RDS")
 res <- readRDS("Results/perlaRun_SVgenes_logcounts.RDS")
 
