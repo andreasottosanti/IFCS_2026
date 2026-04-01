@@ -17,7 +17,7 @@ runs_perla <- list()
 runtime <- c()
 for(i in 1:nstart){
   runtime[i] <- system.time(runs_perla[[i]] <- perla(y = selected, W = W, K = K, R = R,
-                           mean.penalty = c("d","cd"), burnin = 1:(R/2), seed = 1234*i) )
+                                                     mean.penalty = c("d","cd"), burnin = 1:(R/2), seed = 1234*i) )
   runs_perla[[i]] <- perla::recover.loglikelihood(runs_perla[[i]])
 }
 mean(runtime)
@@ -47,7 +47,7 @@ for(k in 1:K){
     if(rhat_coda[k, j]>1.1){
       matplot(samples_matrix, type = "l", 
               main = paste("Cluster",k, "Gene",j,",",round(rhat_coda[k, j],3)))
-     abline(h = 0) 
+      abline(h = 0) 
     }
   }
 }
@@ -79,20 +79,19 @@ perla_draws$Contains_zero <- factor(as.numeric(perla_draws$leftHPD < 0 & perla_d
 perla_draws$Cluster_plot <- ifelse(perla_draws$Contains_zero == 1,
                                    "Contains zero",
                                    as.character(perla_draws$Cluster))
-ggplot(perla_draws,
-       aes(x = Value, y = Gene, 
-           colour = Cluster_plot)) +
+ggplot(
+  subset(perla_draws, Cluster_plot != "Contains zero"),
+  aes(x = Value, y = Gene, colour = Cluster_plot)
+) +
   geom_vline(xintercept = 0, lty = 2) +
   geom_boxplot(width = 0.4) +
   scale_colour_manual(
     values = c(
-      "Cluster 1" = "#440154FF",
-      "Cluster 2" = "#31688EFF",
-      "Cluster 3" = "#35B779FF",
-      "Cluster 4" = "orange",
-      "Contains zero" = "lightgrey"
-    ),
-    breaks = c("Cluster 1", "Cluster 2", "Cluster 3", "Cluster 4")  # <- legend only shows these
+      "Cluster 1" = "#3C3C3C",
+      "Cluster 2" = "#929292",
+      "Cluster 3" = "#C1C1C1",
+      "Cluster 4" = "#E5E5E5"
+    )
   ) +
   theme_bw() +
   labs(y = "", x = expression(mu), colour = "") +
@@ -100,28 +99,7 @@ ggplot(perla_draws,
     text = element_text(size = 18),
     legend.position = "bottom"
   )
-ggsave("Images/SVgenes_logcounts_posterior.pdf", width = 9, height = 7)
-
-# in alternative, I can even avoid displaying the distributions that contain 0
-ggplot(subset(perla_draws, Cluster_plot != "Contains zero"),
-       aes(x = Value, y = Gene, 
-           colour = Cluster_plot)) +
-  geom_vline(xintercept = 0, lty = 2) +
-  geom_boxplot(width = 0.4) +
-  scale_colour_manual(
-    values = c(
-      "Cluster 1" = "#440154FF",
-      "Cluster 2" = "#31688EFF",
-      "Cluster 3" = "#35B779FF",
-      "Cluster 4" = "orange"
-    )) +
-  theme_bw() +
-  labs(y = "", x = expression(mu), colour = "") +
-  theme(
-    text = element_text(size = 18),
-    legend.position = "bottom"
-  )
-ggsave("Images/SVgenes_logcounts_posterior_nozero.pdf", width = 9, height = 7)
+ggsave("Images/SVgenes_logcounts_posterior_grey.pdf", width = 9, height = 7)
 
 
 # k-means -----------------------------------------------------------------
@@ -164,6 +142,21 @@ perla_viridis[perla_viridis == "#FDE725FF"] <- "orange"
 km_viridis[km_viridis == "#FDE725FF"] <- "orange"
 gmm_viridis[gmm_viridis == "#FDE725FF"] <- "orange"
 
+# black and white
+perla_viridis[perla_viridis == "#440154FF"] <- "#3C3C3C"
+perla_viridis[perla_viridis == "#31688EFF"] <- "#929292"
+perla_viridis[perla_viridis == "#35B779FF"] <- "#C1C1C1"
+perla_viridis[perla_viridis == "orange"] <- "#E5E5E5"
+#"Cluster 1" = "#3C3C3C",
+#"Cluster 2" = "#929292",
+#"Cluster 3" = "#C1C1C1",
+#"Cluster 4" = "#E5E5E5"
+
+#"Cluster 1" = "#440154FF",
+#"Cluster 2" = "#31688EFF",
+#"Cluster 3" = "#35B779FF",
+#"Cluster 4" = "orange"
+
 # saved through Rstudio
 ggplot()+theme_minimal()
 grid.raster(img)
@@ -182,21 +175,40 @@ grid.points(spots$x_img, -spots$y_img, pch=19, gp=gpar(col=gmm_viridis), size = 
 
 # plot some genes (estimated)
 genes <- c("Apoe", "S100a5", "Kctd12", "Sash1")
-gene_means <- apply(res_mu, c(1,2), function(y) mean(mcmc(y)))[,rowData(x)$gene_names %in% genes]
+gene_means <- apply(res_mu, c(1,2), function(y) (mcmc(y)))[,rowData(x)$gene_names %in% genes]
 colnames(gene_means) <- genes
 vals <- t(gene_means[colData(x)$perla,])
 vals_frame <- data.frame(values = as.vector(vals),
                          gene_names = rep(rownames(vals), ncol(x)),
                          x = rep(spatialCoords(x)[,1], each = length(genes)),
                          y = -rep(spatialCoords(x)[,2], each = length(genes)))
-ggplot(vals_frame, aes(x = x, y = y, fill = values))+
-  geom_point(cex = 5, shape = 21)+theme_minimal()+
-  facet_wrap(~gene_names)+
-  labs(fill = "", x = "", y = "")+
-  theme(text = element_text(size = 18), axis.text = element_blank())+ 
-  scale_fill_gradient2(midpoint=mean(vals_frame$values), mid="#999999", high="#E69F00",
-                       low="#56B4E9", space ="Lab" )
-ggsave(filename = "Images/SVgenes_logcounts_gene_expressions.pdf", width = 9, height = 7)
+ggplot(vals_frame, aes(x = x, y = y)) +
+  geom_point(
+    aes(
+      fill = abs(values),
+      colour = factor(values > 0,
+                      levels = c(FALSE, TRUE),
+                      labels = c("Negative", "Positive"))
+    ),
+    shape = 21,
+    size = 5,
+    stroke = 1.2
+  ) +
+  scale_fill_gradient(
+    low = "white",
+    high = "#3C3C3C"
+  ) +
+  scale_colour_manual(
+    values = c("Negative" = "grey70", "Positive" = "black")
+  ) +
+  facet_wrap(~gene_names) +
+  theme_minimal() +
+  labs(fill = "", colour = "Sign", x = "", y = "") +
+  theme(
+    text = element_text(size = 18),
+    axis.text = element_blank()
+  )
+ggsave(filename = "Images/SVgenes_logcounts_gene_expressions_grey.pdf", width = 9, height = 7)
 
 
 
